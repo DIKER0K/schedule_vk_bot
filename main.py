@@ -10,6 +10,8 @@ bot.labeler.message_view.register_middleware(UserMiddleware)
 import handlers.commands
 import handlers.settings
 import handlers.settings_callbacks
+import handlers.teacher_panel
+import handlers.teacher_callbacks
 import handlers.onboarding
 # import handlers.text
 

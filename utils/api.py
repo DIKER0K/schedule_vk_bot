@@ -42,6 +42,15 @@ class APIClient:
     def get_user(self, user_id: int):
         return self.request("GET", f"/users/{self.platform}/{user_id}")
 
+    def get_group_users(self, group_name: str):
+        return (
+            self.request(
+                "GET",
+                f"/users/group/{self.platform}/{group_name}",
+            )
+            or []
+        )
+
     def create_user(self, user_id: int, role="student", username=""):
         payload = {
             "user_id": user_id,
