@@ -1,6 +1,7 @@
 from vkbottle.bot import Message
 from core.bot import bot
 
+from keyboards.admin import admin_keyboard
 from utils.api import api
 from keyboards.main import create_main_keyboard
 
@@ -107,6 +108,19 @@ async def today_schedule(message: Message, user):
         return
 
     await send_schedule(message, user, today)
+
+
+@bot.on.message(text="👑 Админ панель")
+async def admin_panel(message: Message, user):
+
+    if user.get("role") != "admin":
+        await message.answer("❌ У вас нет прав администратора.")
+        return
+
+    await message.answer(
+        "👑 Панель администратора\n\nВыберите действие:",
+        keyboard=admin_keyboard().get_json(),
+    )
 
 
 # =========================

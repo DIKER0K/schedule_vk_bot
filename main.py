@@ -12,6 +12,7 @@ import handlers.settings
 import handlers.settings_callbacks
 import handlers.teacher_panel
 import handlers.teacher_callbacks
+import handlers.admin_callbacks
 import handlers.onboarding
 # import handlers.text
 

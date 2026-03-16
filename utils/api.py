@@ -39,8 +39,16 @@ class APIClient:
 
     # USERS
 
-    def get_user(self, user_id: int):
-        return self.request("GET", f"/users/{self.platform}/{user_id}")
+    def get_users_by_platform(self, skip=0, limit=100):
+
+        return (
+            self.request(
+                "GET",
+                f"/users/platform/{self.platform}",
+                params={"skip": skip, "limit": limit},
+            )
+            or []
+        )
 
     def get_group_users(self, group_name: str):
         return (
@@ -84,6 +92,16 @@ class APIClient:
                 f"/users/schedule/send/{self.platform}/{time}",
             )
             or []
+        )
+
+    def get_stats(self):
+
+        return (
+            self.request(
+                "GET",
+                f"/users/stats/{self.platform}",
+            )
+            or {}
         )
 
     # SCHEDULE
