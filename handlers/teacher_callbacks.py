@@ -13,7 +13,7 @@ async def teacher_lessons(event: MessageEvent):
 
     user_id = event.object.user_id
 
-    user = api.get_user(user_id) or {}
+    user = api.get_users_by_platform(user_id) or {}
 
     teacher_fio = user.get("teacher_fio")
 

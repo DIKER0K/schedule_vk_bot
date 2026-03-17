@@ -49,6 +49,10 @@ class APIClient:
             )
             or []
         )
+    
+    def get_user_by_platform(self, user_id: int):
+        """Получить пользователя по platform + user_id"""
+        return self.request("GET", f"/users/{self.platform}/{user_id}")
 
     def get_group_users(self, group_name: str):
         return (
