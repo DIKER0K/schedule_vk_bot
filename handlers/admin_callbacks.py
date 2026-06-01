@@ -161,25 +161,33 @@ async def admin_teachers_list(event: MessageEvent):
 async def admin_broadcast_init(event: MessageEvent):
     await bot.state_dispenser.set(event.peer_id, AdminStates.WAIT_BROADCAST_MSG)
     await event.send_message(
-        "📣 Отправьте сообщение (текст), которое нужно разослать всем пользователям.\n"
+        "📣 Отправьте сообщение (текст или фото), которое нужно разослать всем пользователям.\n"
         "Для отмены напишите 'отмена'."
     )
 
 @bot.on.message(state=AdminStates.WAIT_BROADCAST_MSG)
 async def process_broadcast(message: Message):
-    if message.text.lower() in ("отмена", "назад"):
+    if message.text and message.text.lower() in ("отмена", "назад"):
         await bot.state_dispenser.delete(message.peer_id)
         return await message.answer("❌ Рассылка отменена.", keyboard=admin_keyboard().get_json())
 
+    if not message.text and not message.attachments:
+        return await message.answer("❌ Отправьте текст или фото для рассылки.")
+
     await message.answer("⏳ Начинаю рассылку...")
-    users = api.get_users_by_platform() # Предполагаем метод получения всех юзеров
-    
+    users = api.get_users_by_platform()
+
     count = 0
     for u in users:
         try:
-            await bot.api.messages.send(user_id=u["user_id"], message=message.text, random_id=0)
+            params = dict(user_id=u["user_id"], random_id=0)
+            if message.text:
+                params["message"] = message.text
+            if message.attachments:
+                params["attachment"] = message.attachments
+            await bot.api.messages.send(**params)
             count += 1
-            await asyncio.sleep(0.05) # Защита от флуда VK
+            await asyncio.sleep(0.05)
         except:
             continue
 
