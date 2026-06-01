@@ -435,11 +435,13 @@ async def admin_users_list(event: MessageEvent):
     lines = []
     for u in page_rows:
         uid = u.get("user_id")
-        uname = u.get("username") or "id" + str(uid)
+        first_name = u.get("first_name") or ""
+        last_name = u.get("last_name") or ""
+        name = f"{first_name} {last_name}".strip() or u.get("username") or str(uid)
         role = ROLES.get(u.get("role"), u.get("role"))
         
         emoji = "👨‍🎓" if u.get("role") == "student" else "👨‍🏫" if u.get("role") == "teacher" else "👑"
-        line = f"{emoji} @{uname} ({uid}): {role}"
+        line = f"{emoji} {name} ({uid}): {role}"
         
         if u.get("group_name"):
             line += f", гр: {u.get('group_name')}"

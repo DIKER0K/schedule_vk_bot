@@ -63,12 +63,14 @@ class APIClient:
             or []
         )
 
-    def create_user(self, user_id: int, role="student", username=""):
+    def create_user(self, user_id: int, role="student", username="", first_name="", last_name=""):
         payload = {
             "user_id": user_id,
             "platform": self.platform,
             "role": role,
             "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
         }
         return self.request("POST", "/users/", json=payload)
 

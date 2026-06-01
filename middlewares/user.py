@@ -17,38 +17,48 @@ class UserMiddleware(BaseMiddleware[Message]):
         if not user:
             logger.info(f"➕ Создаём нового пользователя {user_id}")
             vk_user = await message.ctx_api.users.get(
-                user_ids=user_id, fields=["domain"]
+                user_ids=user_id, fields=["domain,first_name,last_name"]
             )
 
             username = ""
+            first_name = ""
+            last_name = ""
 
             if vk_user:
                 vk_user = vk_user[0]
-
-                if vk_user.domain:
-                    username = vk_user.domain
-                else:
-                    username = f"{vk_user.first_name} {vk_user.last_name}"
+                first_name = getattr(vk_user, 'first_name', '') or ''
+                last_name = getattr(vk_user, 'last_name', '') or ''
+                username = vk_user.domain or f"{first_name} {last_name}"
 
             user = api.create_user(
                 user_id=user_id,
                 username=username,
+                first_name=first_name,
+                last_name=last_name,
             )
             logger.info(f"✅ Пользователь создан: {user}")
 
-        # Дозаполняем username, если пустой
-        if not user.get("username"):
+        # Дозаполняем first_name, last_name, если пустые
+        if not user.get("first_name") or not user.get("last_name"):
             try:
                 vk_user = await message.ctx_api.users.get(
-                    user_ids=user_id, fields=["domain"]
+                    user_ids=user_id, fields=["domain,first_name,last_name"]
                 )
                 if vk_user:
                     vk_user = vk_user[0]
-                    username = vk_user.domain or f"{vk_user.first_name} {vk_user.last_name}"
-                    api.update_user(user_id, {"username": username})
-                    user["username"] = username
+                    first_name = getattr(vk_user, 'first_name', '') or ''
+                    last_name = getattr(vk_user, 'last_name', '') or ''
+                    domain = getattr(vk_user, 'domain', '') or ''
+                    api.update_user(user_id, {
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "username": domain or f"{first_name} {last_name}",
+                    })
+                    user["first_name"] = first_name
+                    user["last_name"] = last_name
+                    user["username"] = domain or f"{first_name} {last_name}"
             except Exception as e:
-                logger.warning(f"Failed to update username for {user_id}: {e}")
+                logger.warning(f"Failed to update user data for {user_id}: {e}")
 
         # ВАЖНО
         self.send({"user": user})
