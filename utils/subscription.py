@@ -9,7 +9,7 @@ async def is_subscribed(api, user_id: int) -> bool:
         return True
 
     try:
-        result = await api.groups.isMember(group_id=GROUP_ID, user_id=user_id)
+        result = await api.groups.is_member(group_id=GROUP_ID, user_id=user_id)
         return bool(result)
     except Exception as e:
         logger.error(f"Subscription check error for user {user_id}: {e}")
