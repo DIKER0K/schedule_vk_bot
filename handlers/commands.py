@@ -12,6 +12,7 @@ from utils.schedule_utils import (
     format_schedule_for_day,
     format_teacher_schedule_for_day,
 )
+from utils.subscription import is_subscribed, get_subscribe_message
 
 DAY_MAP = {
     "📅 ПН": "Понедельник",
@@ -73,6 +74,11 @@ def get_teacher_schedule(user, day):
 
 
 async def send_schedule(message: Message, user, day):
+
+    subscribed = await is_subscribed(message.ctx_api, message.from_id)
+    if not subscribed:
+        await message.answer(get_subscribe_message(), keyboard=get_menu(user))
+        return
 
     is_teacher = user.get("role") in ["teacher", "admin"]
 

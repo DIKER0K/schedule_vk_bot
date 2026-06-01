@@ -10,6 +10,10 @@ TZ: str = os.getenv("TZ", "Asia/Yekaterinburg")
 
 PLATFORM = "VK"
 
+# VK community settings
+GROUP_ID: str = os.getenv("GROUP_ID", "")
+GROUP_LINK: str = os.getenv("GROUP_LINK", "")
+
 # Roles
 ROLES = {
     "student": "👨‍🎓 Студент",

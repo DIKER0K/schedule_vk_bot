@@ -5,6 +5,7 @@ from datetime import datetime
 from core.bot import bot
 from utils.api import api
 from utils.schedule_utils import get_current_day, format_schedule_for_day
+from utils.subscription import is_subscribed
 
 
 scheduler = AsyncIOScheduler()
@@ -31,6 +32,10 @@ async def send_daily_schedule():
             continue
 
         user_id = user["user_id"]
+
+        subscribed = await is_subscribed(bot.api, user_id)
+        if not subscribed:
+            continue
 
         schedule = api.get_schedule(group)
 
