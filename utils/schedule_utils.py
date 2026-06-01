@@ -189,3 +189,61 @@ def format_teacher_schedule_for_day(
         result += "\n\n2️⃣ Вторая смена:\n" + "\n".join(second_shift)
 
     return result
+
+
+def _format_shift_lessons(schedule: Dict, day: str, shift_name: str) -> list:
+    shift_dict = schedule.get(shift_name, {})
+    day_dict = shift_dict.get(day, {})
+    lessons = []
+    for num, info in sorted(day_dict.items(), key=lambda x: lesson_sort_key(x[0])):
+        subject = info.get("subject", "")
+        group = info.get("group", "")
+        room = info.get("classroom", "")
+        time_str = info.get("time")
+        base, half, subgroup = format_lesson_number(num)
+        if half == "2":
+            line = f"   [2/2] ({subgroup} гр) {subject}" if subgroup else f"   [2/2] {subject}"
+        else:
+            line = f"{base}. "
+            if half == "1":
+                line += "[1/2] "
+            line += subject
+        if group:
+            line += f" — {group}"
+        if room:
+            line += f" ({room} каб.)"
+        if time_str:
+            line += f"\n 🕒 {time_str}"
+        lessons.append(line)
+    return lessons
+
+
+def format_teacher_schedule_for_week(
+    teacher_full_fio: str, schedule_doc: Dict[str, Any]
+) -> str:
+    if not teacher_full_fio:
+        return "❌ Не указано ФИО преподавателя"
+    if not schedule_doc or "schedule" not in schedule_doc:
+        return f"📭 Расписание для {teacher_full_fio} не найдено"
+
+    schedule = schedule_doc.get("schedule", {})
+    result = f"👨‍🏫 Расписание преподавателя\n{teacher_full_fio}\n\n"
+
+    has_any = False
+    for day in DAYS_RU:
+        first = _format_shift_lessons(schedule, day, "first_shift")
+        second = _format_shift_lessons(schedule, day, "second_shift")
+        if not first and not second:
+            continue
+        has_any = True
+        result += f"📅 {day}\n"
+        if first:
+            result += "1️⃣ Первая смена:\n" + "\n".join(first) + "\n"
+        if second:
+            result += "2️⃣ Вторая смена:\n" + "\n".join(second) + "\n"
+        result += "\n"
+
+    if not has_any:
+        return f"📭 Расписание для {teacher_full_fio} не найдено"
+
+    return result.strip()

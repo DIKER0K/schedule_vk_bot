@@ -9,4 +9,6 @@ def teacher_panel_keyboard(user):
 
     kb.add(Callback("👥 Мои группы", payload={"cmd": "teacher_groups"})).row()
 
+    kb.add(Callback("👤 Занятия другого преподавателя", payload={"cmd": "teacher_other_schedule"})).row()
+
     return kb
