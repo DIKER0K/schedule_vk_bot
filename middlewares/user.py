@@ -36,5 +36,19 @@ class UserMiddleware(BaseMiddleware[Message]):
             )
             logger.info(f"✅ Пользователь создан: {user}")
 
+        # Дозаполняем username, если пустой
+        if not user.get("username"):
+            try:
+                vk_user = await message.ctx_api.users.get(
+                    user_ids=user_id, fields=["domain"]
+                )
+                if vk_user:
+                    vk_user = vk_user[0]
+                    username = vk_user.domain or f"{vk_user.first_name} {vk_user.last_name}"
+                    api.update_user(user_id, {"username": username})
+                    user["username"] = username
+            except Exception as e:
+                logger.warning(f"Failed to update username for {user_id}: {e}")
+
         # ВАЖНО
         self.send({"user": user})
