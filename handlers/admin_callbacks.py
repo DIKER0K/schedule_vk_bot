@@ -445,6 +445,14 @@ async def admin_users_list(event: MessageEvent):
         
         if u.get("group_name"):
             line += f", гр: {u.get('group_name')}"
+
+        username = u.get("username")
+        if username and not username.startswith("id"):
+            link = f"https://vk.com/{username}"
+        else:
+            link = f"https://vk.com/id{uid}"
+        line += f"\n  🔗 {link}"
+
         lines.append(line)
 
     page_num = (skip // limit) + 1
