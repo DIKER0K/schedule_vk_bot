@@ -7,7 +7,7 @@ def course_keyboard():
 
     kb.add(Text("1 курс")).add(Text("2 курс")).row()
     kb.add(Text("3 курс")).add(Text("4 курс")).row()
-
+    kb.add(Text("👨‍🏫 Я преподаватель")).row()
     kb.add(Text("❌ Отмена"))
 
     return kb

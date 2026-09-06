@@ -1,4 +1,5 @@
-from vkbottle.bot import Message
+from vkbottle.bot import Message, MessageEvent
+from vkbottle import Keyboard, Callback
 from core.bot import bot
 
 from keyboards.course import course_keyboard
@@ -7,6 +8,7 @@ from keyboards.main import create_main_keyboard
 from states.feedback_states import FeedbackStates
 from states.reg_states import RegStates
 from utils.api import api
+from utils.teacher_requests import teacher_requests
 
 @bot.on.message(state=FeedbackStates.WAIT_MESSAGE)
 async def process_feedback(message: Message):
@@ -78,6 +80,89 @@ async def process_teacher_fio(message: Message):
         keyboard=kb.get_json()
     )
 
+@bot.on.message(text="👨‍🏫 Я преподаватель")
+async def teacher_request_start(message: Message, user):
+    state = await bot.state_dispenser.get(message.peer_id)
+    if state:
+        return
+
+    if user.get("role") in ["teacher", "admin"]:
+        await message.answer("✅ У вас уже есть роль преподавателя.")
+        return
+
+    if teacher_requests.get(message.from_id):
+        await message.answer("⏳ У вас уже есть заявка на рассмотрении.")
+        return
+
+    await bot.state_dispenser.set(message.peer_id, RegStates.WAIT_TEACHER_REQUEST_FIO)
+    await message.answer(
+        "👨‍🏫 Заявка на роль преподавателя\n\n"
+        "Введите ваше ФИО полностью (Фамилия Имя Отчество):\n"
+        "Пример: Иванов Иван Иванович\n\n"
+        "Для отмены напишите «отмена»."
+    )
+
+@bot.on.message(state=RegStates.WAIT_TEACHER_REQUEST_FIO)
+async def process_teacher_request_fio(message: Message, user):
+    text = message.text.strip()
+
+    if text.lower() in ("отмена", "cancel", "назад"):
+        await bot.state_dispenser.delete(message.peer_id)
+        kb = course_keyboard()
+        await message.answer("❌ Заявка отменена.", keyboard=kb.get_json())
+        return
+
+    parts = text.split()
+    if len(parts) < 2:
+        await message.answer(
+            "❌ Неверный формат. Введите полностью: Фамилия Имя Отчество.\n"
+            "Пример: Иванов Иван Иванович"
+        )
+        return
+
+    username = user.get("username") or str(message.from_id)
+    first_name = user.get("first_name") or ""
+    last_name = user.get("last_name") or ""
+    display_name = f"{first_name} {last_name}".strip() or username
+
+    teacher_requests.add(message.from_id, text, display_name)
+
+    await bot.state_dispenser.delete(message.peer_id)
+
+    from vkbottle import Keyboard, Callback
+    kb = Keyboard(inline=True)
+    kb.add(Callback("❌ Отменить заявку", {"cmd": "cancel_teacher_request", "uid": message.from_id}))
+
+    await message.answer(
+        "⏳ Заявка отправлена!\n\n"
+        "Ожидайте подтверждения администратора.\n"
+        "Вы получите уведомление после рассмотрения заявки.",
+        keyboard=kb.get_json()
+    )
+
+    users = api.get_users_by_platform(limit=1000)
+    admins = [u for u in users if u.get("role") == "admin"]
+
+    kb_admin = Keyboard(inline=True)
+    kb_admin.add(Callback("✅ Принять", {"cmd": "approve_teacher", "uid": message.from_id}))
+    kb_admin.add(Callback("❌ Отклонить", {"cmd": "reject_teacher", "uid": message.from_id}))
+
+    for admin in admins:
+        try:
+            await bot.api.messages.send(
+                user_id=admin["user_id"],
+                message=(
+                    "📬 Новая заявка на роль преподавателя\n\n"
+                    f"👤 {display_name}\n"
+                    f"🆔 ID: {message.from_id}\n"
+                    f"📝 ФИО: {text}"
+                ),
+                random_id=0,
+                keyboard=kb_admin.get_json()
+            )
+        except:
+            pass
+
 @bot.on.message()
 async def onboarding_handler(message: Message, user):
     # 1. Проверяем, не находится ли пользователь уже в процессе ввода ФИО
@@ -131,3 +216,21 @@ async def onboarding_handler(message: Message, user):
         "👋 Добро пожаловать в бот расписания!\n\n📚 Выберите ваш курс:",
         keyboard=kb.get_json(),
     )
+
+
+@bot.on.raw_event(
+    "message_event",
+    dataclass=MessageEvent,
+    payload_map={"cmd": "cancel_teacher_request"},
+)
+async def cancel_teacher_request(event: MessageEvent):
+    payload = event.get_payload_json()
+    uid = payload.get("uid", event.object.user_id)
+
+    req = teacher_requests.remove(uid)
+    if not req:
+        await event.show_snackbar("❌ У вас нет активных заявок.")
+        return
+
+    kb = course_keyboard()
+    await event.edit_message("❌ Заявка отменена.", keyboard=kb.get_json())

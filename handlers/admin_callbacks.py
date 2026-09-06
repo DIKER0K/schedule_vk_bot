@@ -11,6 +11,7 @@ from states.reg_states import RegStates
 from utils.api import api
 from keyboards.admin import admin_keyboard
 from states.admin_states import AdminStates
+from utils.teacher_requests import teacher_requests
 
 
 @bot.on.raw_event(
@@ -558,3 +559,81 @@ async def admin_back_to_menu(event: MessageEvent):
         "👑 Панель администратора\n\nВыберите действие:",
         keyboard=admin_keyboard().get_json()
     )
+
+
+@bot.on.raw_event(
+    "message_event",
+    dataclass=MessageEvent,
+    payload_map={"cmd": "approve_teacher"},
+)
+async def approve_teacher_request(event: MessageEvent):
+    payload = event.get_payload_json()
+    uid = payload.get("uid")
+
+    if not uid:
+        await event.show_snackbar("❌ Ошибка: ID пользователя не найден")
+        return
+
+    req = teacher_requests.remove(uid)
+    if not req:
+        await event.edit_message("⚠️ Заявка уже была обработана.")
+        return
+
+    api.update_user(uid, {"role": "teacher"})
+
+    await event.edit_message(
+        f"✅ Заявка принята!\n\n"
+        f"👤 {req.username} (ID: {uid})\n"
+        f"📝 ФИО: {req.fio}"
+    )
+
+    try:
+        await bot.state_dispenser.set(uid, RegStates.WAIT_TEACHER_FIO)
+        await bot.api.messages.send(
+            user_id=uid,
+            message=(
+                "🎉 Ваша заявка на роль преподавателя одобрена!\n\n"
+                f"📝 Ваше ФИО: {req.fio}\n\n"
+                "Введите ФИО для подтверждения (или напишите «отмена»):"
+            ),
+            random_id=0
+        )
+    except:
+        pass
+
+
+@bot.on.raw_event(
+    "message_event",
+    dataclass=MessageEvent,
+    payload_map={"cmd": "reject_teacher"},
+)
+async def reject_teacher_request(event: MessageEvent):
+    payload = event.get_payload_json()
+    uid = payload.get("uid")
+
+    if not uid:
+        await event.show_snackbar("❌ Ошибка: ID пользователя не найден")
+        return
+
+    req = teacher_requests.remove(uid)
+    if not req:
+        await event.edit_message("⚠️ Заявка уже была обработана.")
+        return
+
+    await event.edit_message(
+        f"❌ Заявка отклонена\n\n"
+        f"👤 {req.username} (ID: {uid})\n"
+        f"📝 ФИО: {req.fio}"
+    )
+
+    try:
+        await bot.api.messages.send(
+            user_id=uid,
+            message=(
+                "😔 Ваша заявка на роль преподавателя отклонена.\n\n"
+                "Если вы считаете, что это ошибка, обратитесь к администратору."
+            ),
+            random_id=0
+        )
+    except:
+        pass
