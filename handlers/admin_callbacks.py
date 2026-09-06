@@ -564,76 +564,130 @@ async def admin_back_to_menu(event: MessageEvent):
 @bot.on.raw_event(
     "message_event",
     dataclass=MessageEvent,
-    payload_map={"cmd": "approve_teacher"},
+    payload_map={"cmd": "vote_teacher"},
 )
-async def approve_teacher_request(event: MessageEvent):
+async def vote_teacher_request(event: MessageEvent):
     payload = event.get_payload_json()
     uid = payload.get("uid")
+    vote_for = payload.get("vote", True)
 
     if not uid:
         await event.show_snackbar("❌ Ошибка: ID пользователя не найден")
         return
 
-    req = teacher_requests.remove(uid)
+    req = teacher_requests.get(uid)
     if not req:
+        await event.edit_message("⚠️ Заявка уже была обработана или отменена.")
+        return
+
+    if req.resolved:
         await event.edit_message("⚠️ Заявка уже была обработана.")
         return
 
-    api.update_user(uid, {"role": "teacher"})
+    admin_id = event.object.user_id
+    admin_info = await bot.api.users.get(user_ids=admin_id, fields=["first_name,last_name"])
+    admin_name = f"{admin_info[0].first_name} {admin_info[0].last_name}" if admin_info else str(admin_id)
 
-    await event.edit_message(
-        f"✅ Заявка принята!\n\n"
+    req.add_vote(admin_id, admin_name, vote_for)
+
+    users = api.get_users_by_platform(limit=1000)
+    admins = [u for u in users if u.get("role") == "admin"]
+    total_admins = len(admins)
+
+    vote_text = req.get_vote_text(total_admins)
+
+    kb_admin = Keyboard(inline=True)
+    kb_admin.add(Callback("✅ Принять", {"cmd": "vote_teacher", "uid": uid, "vote": True}))
+    kb_admin.add(Callback("❌ Отклонить", {"cmd": "vote_teacher", "uid": uid, "vote": False})).row()
+
+    msg_text = (
+        f"📬 Заявка на роль преподавателя\n\n"
         f"👤 {req.username} (ID: {uid})\n"
-        f"📝 ФИО: {req.fio}"
+        f"📝 ФИО: {req.fio}\n\n"
+        f"📊 Голосование ({total_admins} админов, нужно {((total_admins + 1) // 2)} голосов)\n"
+        f"{vote_text}"
     )
 
-    try:
-        await bot.state_dispenser.set(uid, RegStates.WAIT_TEACHER_FIO)
-        await bot.api.messages.send(
-            user_id=uid,
-            message=(
-                "🎉 Ваша заявка на роль преподавателя одобрена!\n\n"
-                f"📝 Ваше ФИО: {req.fio}\n\n"
-                "Введите ФИО для подтверждения (или напишите «отмена»):"
-            ),
-            random_id=0
-        )
-    except:
-        pass
+    await event.edit_message(msg_text, keyboard=kb_admin.get_json())
 
+    for admin in admins:
+        if admin["user_id"] == admin_id:
+            continue
+        try:
+            await bot.api.messages.send(
+                user_id=admin["user_id"],
+                message=f"🗳️ {admin_name} проголосовал(а) {'✅ за' if vote_for else '❌ против'} заявки {req.username} (ID: {uid})",
+                random_id=0
+            )
+        except:
+            pass
 
-@bot.on.raw_event(
-    "message_event",
-    dataclass=MessageEvent,
-    payload_map={"cmd": "reject_teacher"},
-)
-async def reject_teacher_request(event: MessageEvent):
-    payload = event.get_payload_json()
-    uid = payload.get("uid")
+    if req.is_approved(total_admins):
+        req.resolved = True
+        teacher_requests.remove(uid)
 
-    if not uid:
-        await event.show_snackbar("❌ Ошибка: ID пользователя не найден")
-        return
+        api.update_user(uid, {"role": "teacher"})
 
-    req = teacher_requests.remove(uid)
-    if not req:
-        await event.edit_message("⚠️ Заявка уже была обработана.")
-        return
+        for admin in admins:
+            try:
+                await bot.api.messages.send(
+                    user_id=admin["user_id"],
+                    message=(
+                        "✅ Заявка на преподавателя принята!\n\n"
+                        f"👤 {req.username} (ID: {uid})\n"
+                        f"📝 ФИО: {req.fio}\n\n"
+                        f"{vote_text}"
+                    ),
+                    random_id=0
+                )
+            except:
+                pass
 
-    await event.edit_message(
-        f"❌ Заявка отклонена\n\n"
-        f"👤 {req.username} (ID: {uid})\n"
-        f"📝 ФИО: {req.fio}"
-    )
+        try:
+            await bot.state_dispenser.set(uid, RegStates.WAIT_TEACHER_FIO)
+            await bot.api.messages.send(
+                user_id=uid,
+                message=(
+                    "🎉 Ваша заявка на роль преподавателя одобрена!\n\n"
+                    f"📝 Ваше ФИО: {req.fio}\n\n"
+                    "Введите ФИО для подтверждения (или напишите «отмена»):"
+                ),
+                random_id=0
+            )
+        except:
+            pass
 
-    try:
-        await bot.api.messages.send(
-            user_id=uid,
-            message=(
-                "😔 Ваша заявка на роль преподавателя отклонена.\n\n"
-                "Если вы считаете, что это ошибка, обратитесь к администратору."
-            ),
-            random_id=0
-        )
-    except:
-        pass
+    elif req.is_rejected(total_admins):
+        req.resolved = True
+        teacher_requests.remove(uid)
+        teacher_requests.set_cooldown(uid)
+
+        for admin in admins:
+            try:
+                await bot.api.messages.send(
+                    user_id=admin["user_id"],
+                    message=(
+                        "❌ Заявка на преподавателя отклонена\n\n"
+                        f"👤 {req.username} (ID: {uid})\n"
+                        f"📝 ФИО: {req.fio}\n\n"
+                        f"{vote_text}"
+                    ),
+                    random_id=0
+                )
+            except:
+                pass
+
+        try:
+            await bot.api.messages.send(
+                user_id=uid,
+                message=(
+                    "😔 Ваша заявка на роль преподавателя отклонена.\n\n"
+                    "Попробовать снова можно через 1 час.\n\n"
+                    "По вопросам обращайтесь:\n"
+                    "• https://vk.ru/tbl_daun\n"
+                    "• https://vk.ru/nothame"
+                ),
+                random_id=0
+            )
+        except:
+            pass

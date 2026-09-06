@@ -94,6 +94,15 @@ async def teacher_request_start(message: Message, user):
         await message.answer("⏳ У вас уже есть заявка на рассмотрении.")
         return
 
+    cooldown = teacher_requests.get_cooldown_remaining(message.from_id)
+    if cooldown > 0:
+        minutes = cooldown // 60
+        seconds = cooldown % 60
+        await message.answer(
+            f"⏳ Вы недавно получили отказ. Попробуйте снова через {minutes} мин. {seconds} сек."
+        )
+        return
+
     await bot.state_dispenser.set(message.peer_id, RegStates.WAIT_TEACHER_REQUEST_FIO)
     await message.answer(
         "👨‍🏫 Заявка на роль преподавателя\n\n"
@@ -135,28 +144,36 @@ async def process_teacher_request_fio(message: Message, user):
 
     await message.answer(
         "⏳ Заявка отправлена!\n\n"
-        "Ожидайте подтверждения администратора.\n"
-        "Вы получите уведомление после рассмотрения заявки.",
+        "Ожидайте подтверждения администраторов.\n"
+        "Для принятия решения требуется голосование.",
         keyboard=kb.get_json()
     )
 
     users = api.get_users_by_platform(limit=1000)
     admins = [u for u in users if u.get("role") == "admin"]
+    total_admins = len(admins)
+
+    req = teacher_requests.get(message.from_id)
+    vote_text = req.get_vote_text(total_admins) if req else ""
 
     kb_admin = Keyboard(inline=True)
-    kb_admin.add(Callback("✅ Принять", {"cmd": "approve_teacher", "uid": message.from_id}))
-    kb_admin.add(Callback("❌ Отклонить", {"cmd": "reject_teacher", "uid": message.from_id}))
+    kb_admin.add(Callback("✅ Принять", {"cmd": "vote_teacher", "uid": message.from_id, "vote": True}))
+    kb_admin.add(Callback("❌ Отклонить", {"cmd": "vote_teacher", "uid": message.from_id, "vote": False})).row()
+
+    msg_text = (
+        "📬 Новая заявка на роль преподавателя\n\n"
+        f"👤 {display_name}\n"
+        f"🆔 ID: {message.from_id}\n"
+        f"📝 ФИО: {text}\n\n"
+        f"📊 Голосование ({total_admins} админов, нужно {((total_admins + 1) // 2)} голосов)\n"
+        f"{vote_text}"
+    )
 
     for admin in admins:
         try:
             await bot.api.messages.send(
                 user_id=admin["user_id"],
-                message=(
-                    "📬 Новая заявка на роль преподавателя\n\n"
-                    f"👤 {display_name}\n"
-                    f"🆔 ID: {message.from_id}\n"
-                    f"📝 ФИО: {text}"
-                ),
+                message=msg_text,
                 random_id=0,
                 keyboard=kb_admin.get_json()
             )
