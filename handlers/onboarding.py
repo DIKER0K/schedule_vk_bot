@@ -144,7 +144,7 @@ async def process_teacher_request_fio(message: Message, user):
 
     await message.answer(
         "⏳ Заявка отправлена!\n\n"
-        "Ожидайте подтверждения администраторов."
+        "Ожидайте подтверждения администраторов.\n",
         keyboard=kb.get_json()
     )
 
