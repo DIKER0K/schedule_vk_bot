@@ -15,6 +15,8 @@ def admin_keyboard():
 
     kb.add(Callback("🔔 Обновить расписание звонков", payload={"cmd": "admin_refresh_bell"})).row()
 
-    kb.add(Callback("🎯 Назначить преподавателя", payload={"cmd": "admin_set_teacher"}))
+    kb.add(Callback("🎯 Назначить преподавателя", payload={"cmd": "admin_set_teacher"})).row()
+
+    kb.add(Callback("👑 Назначить админа", payload={"cmd": "admin_set_admin"}))
 
     return kb

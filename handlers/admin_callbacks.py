@@ -405,6 +405,67 @@ async def process_teacher_set(message: Message):
     await message.answer(response, keyboard=admin_keyboard().get_json())
     await bot.state_dispenser.delete(message.peer_id)
 
+
+@bot.on.raw_event(
+    "message_event",
+    dataclass=MessageEvent,
+    payload={"cmd": "admin_set_admin"},
+)
+async def admin_set_admin(event: MessageEvent):
+
+    await bot.state_dispenser.set(
+        event.object.user_id,
+        AdminStates.WAIT_ADMIN_ID,
+    )
+
+    await event.send_message(
+        "👑 Введите ID пользователя, которого нужно назначить администратором."
+    )
+
+
+@bot.on.message(state=AdminStates.WAIT_ADMIN_ID)
+async def process_admin_set(message: Message):
+    text = message.text.strip()
+
+    if text.lower() in ("отмена", "cancel", "назад"):
+        await bot.state_dispenser.delete(message.peer_id)
+        return await message.answer("⛔️ Назначение отменено.", keyboard=admin_keyboard().get_json())
+
+    raw_ids = re.split(r'[\,\s]+', text)
+    ok, fail = [], []
+
+    for token in raw_ids:
+        if not token: continue
+        try:
+            uid = int(token)
+            updated = api.update_user(uid, {"role": "admin"})
+            
+            if updated:
+                ok.append(str(uid))
+                try:
+                    await bot.api.messages.send(
+                        user_id=uid, 
+                        message="🎉 Вам назначена роль администратора!",
+                        random_id=0
+                    )
+                except: pass
+            else:
+                fail.append(token)
+        except ValueError:
+            fail.append(token)
+
+    response = ""
+    if ok:
+        response += f"✅ Назначены администраторами: {', '.join(ok)}\n"
+    if fail:
+        response += f"⚠️ Не удалось обработать (не найдены или неверный формат): {', '.join(fail)}"
+    
+    if not response:
+        response = "❌ Вы не ввели ни одного корректного ID."
+
+    await message.answer(response, keyboard=admin_keyboard().get_json())
+    await bot.state_dispenser.delete(message.peer_id)
+
 @bot.on.raw_event(
     "message_event",
     dataclass=MessageEvent,
