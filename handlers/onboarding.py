@@ -160,10 +160,13 @@ async def process_teacher_request_fio(message: Message, user):
     kb_admin.add(Callback("✅ Принять", {"cmd": "vote_teacher", "uid": message.from_id, "vote": True}))
     kb_admin.add(Callback("❌ Отклонить", {"cmd": "vote_teacher", "uid": message.from_id, "vote": False})).row()
 
+    profile_link = f"https://vk.com/{username}" if username and not username.startswith("id") else f"https://vk.com/id{message.from_id}"
+
     msg_text = (
         "📬 Новая заявка на роль преподавателя\n\n"
         f"👤 {display_name}\n"
         f"🆔 ID: {message.from_id}\n"
+        f"🔗 {profile_link}\n"
         f"📝 ФИО: {text}\n\n"
         f"📊 Голосование ({total_admins} админов, нужно {((total_admins + 1) // 2)} голосов)\n"
         f"{vote_text}"
