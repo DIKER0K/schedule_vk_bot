@@ -24,7 +24,9 @@ class APIClient:
 
     def request(self, method: str, path: str, **kwargs):
         try:
-            url = f"{self.base_url}{path}"
+            # base_url в .env может оканчиваться на «/»; склеиваем без двойного
+            # слэша, иначе часть версий requests шлёт «//next-bell» и получает 404.
+            url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
             r = self.session.request(method, url, timeout=30, **kwargs)
 
             if r.status_code == 200:
@@ -99,6 +101,10 @@ class APIClient:
             )
             or []
         )
+
+    def get_next_bell(self, shift: int = 1):
+        """Когда следующий звонок (по расписанию звонков школы)."""
+        return self.request("GET", "/next-bell", params={"shift": shift})
 
     def get_stats(self):
 

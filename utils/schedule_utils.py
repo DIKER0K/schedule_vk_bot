@@ -166,6 +166,18 @@ def format_teacher_schedule_for_day(
             if time_str:
                 line += f"\n 🕒 {time_str}"
 
+            # Параллельные группы (одна пара у нескольких групп сразу)
+            for p in info.get("parallels") or []:
+                p_subj = (p.get("subject") or "").strip()
+                p_group = (p.get("group") or "").strip()
+                p_room = (p.get("classroom") or "").strip()
+                alt = f"   ⚡ ещё: {p_group}"
+                if p_subj and p_subj.lower() != (subject or "").strip().lower():
+                    alt += f" — {p_subj}"
+                if p_room:
+                    alt += f" ({p_room} каб.)"
+                line += "\n" + alt
+
             if shift_name == "first_shift":
                 first_shift.append(line)
             else:
@@ -214,6 +226,24 @@ def _format_shift_lessons(schedule: Dict, day: str, shift_name: str) -> list:
             line += f" ({room} каб.)"
         if time_str:
             line += f"\n 🕒 {time_str}"
+
+        # Параллельные группы: в это же время у преподавателя пара с кем-то ещё.
+        # Без этого бот показывал одну группу из нескольких.
+        parallels = info.get("parallels") or []
+        if parallels:
+            line += "\n ⚡ Параллельно у вас ещё:"
+            for p in parallels:
+                p_subj = (p.get("subject") or "").strip()
+                p_group = (p.get("group") or "").strip()
+                p_room = (p.get("classroom") or "").strip()
+                alt = f"      • {p_group}"
+                # предмет может совпадать (лекция на поток) — тогда не дублируем
+                if p_subj and p_subj.lower() != (subject or "").strip().lower():
+                    alt += f" — {p_subj}"
+                if p_room:
+                    alt += f" ({p_room} каб.)"
+                line += "\n" + alt
+
         lessons.append(line)
     return lessons
 
