@@ -62,6 +62,10 @@ def format_schedule_for_day(
     if not zero_lesson and not day_lessons:
         return f"📅 {in_day_ru(day).capitalize()} пар нет"
     result = f"📚 Расписание на {day} ({group_name}):\n\n"
+    note = (schedule_doc.get("note") or "").strip()
+    if note:
+        # Приказ администрации дня: например, «все студенты учатся во 2 корпусе»
+        result = f"📍 {note}\n\n" + result
     lessons_today: List[str] = []
     # Нулевая пара
     if zero_lesson:
