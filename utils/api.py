@@ -1,8 +1,38 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import requests
 from requests.adapters import HTTPAdapter, Retry
 
 from core.config import API_URL, PLATFORM
+
+
+class APIError(Exception):
+    """Ответ бэкенда с ошибкой (не 200).
+
+    Нужен там, где текст ошибки важен для пользователя: «расписание ещё
+    не опубликовано» — это не сбой, его надо показать человеческим языком.
+    """
+
+    def __init__(self, status_code: int, detail: str = ""):
+        self.status_code = status_code
+        self.detail = (detail or "").strip()
+        super().__init__(f"{status_code}: {self.detail}")
+
+
+def _error_detail(response) -> str:
+    """Текст ошибки FastAPI: поле detail, иначе тело ответа как есть."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return (response.text or "").strip()
+
+    if isinstance(payload, dict):
+        detail = payload.get("detail")
+        if isinstance(detail, str):
+            return detail.strip()
+        if detail:
+            return str(detail).strip()
+
+    return (response.text or "").strip()
 
 
 class APIClient:
@@ -22,7 +52,7 @@ class APIClient:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
-    def request(self, method: str, path: str, **kwargs):
+    def request(self, method: str, path: str, raise_on_error: bool = False, **kwargs):
         try:
             # base_url в .env может оканчиваться на «/»; склеиваем без двойного
             # слэша, иначе часть версий requests шлёт «//next-bell» и получает 404.
@@ -32,10 +62,18 @@ class APIClient:
             if r.status_code == 200:
                 return r.json()
 
-            print(f"[WARN] {method} {path} → {r.status_code}: {r.text[:200]}")
+            detail = _error_detail(r)
+            print(f"[WARN] {method} {path} → {r.status_code}: {detail[:200]}")
 
+            if raise_on_error:
+                raise APIError(r.status_code, detail)
+
+        except APIError:
+            raise
         except Exception as e:
             print(f"[API ERROR] {method} {path}", e)
+            if raise_on_error:
+                raise APIError(0, str(e))
 
         return None
 
@@ -132,8 +170,16 @@ class APIClient:
 
         return sorted(set(groups))
 
-    def get_schedule(self, group_name: str):
-        return self.request("GET", f"/schedule/{group_name}")
+    def get_schedule(
+        self, group_name: str, date: Optional[str] = None, raise_on_error: bool = False
+    ):
+        """Расписание группы на дату (YYYY-MM-DD); без даты — на сегодня."""
+        return self.request(
+            "GET",
+            f"/schedule/{group_name}",
+            params={"date": date} if date else None,
+            raise_on_error=raise_on_error,
+        )
 
     def get_teacher_schedule(self, fio_key: str):
         return self.request("GET", f"/schedule/teacher/{fio_key}")

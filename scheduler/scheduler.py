@@ -7,7 +7,12 @@ from core.bot import bot
 from core.config import TZ
 from utils.api import api
 from utils.fio_utils import fio_full_to_initials
-from utils.schedule_utils import get_current_day, format_schedule_for_day, format_teacher_schedule_for_day
+from utils.schedule_utils import (
+    date_for_day,
+    get_current_day,
+    format_schedule_for_day,
+    format_teacher_schedule_for_day,
+)
 from utils.subscription import is_subscribed
 
 
@@ -45,7 +50,8 @@ async def send_daily_schedule():
             group = user.get("group_name")
             if not group:
                 continue
-            schedule = api.get_schedule(group)
+            # дата версии приказа: ровно тот день, за который рассылаем
+            schedule = api.get_schedule(group, date=date_for_day(day))
             if not schedule:
                 continue
             text = format_schedule_for_day(group, schedule, day)

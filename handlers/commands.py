@@ -5,15 +5,17 @@ from vkbottle.bot import Message, MessageEvent
 from core.bot import bot
 
 from keyboards.admin import admin_keyboard
-from utils.api import api
+from utils.api import APIError, api
 from keyboards.main import create_main_keyboard
 from keyboards.bells import bell_lessons_keyboard, BELL_LESSONS_CACHE
 
 from core.config import TZ
 from utils.fio_utils import fio_full_to_initials
 from utils.schedule_utils import (
+    date_for_day,
     get_current_day,
     get_tomorrow_day,
+    format_schedule_error,
     format_schedule_for_day,
     format_teacher_schedule_for_day,
 )
@@ -54,7 +56,14 @@ def get_student_schedule(user, day):
     if not group:
         return "❌ Сначала выберите группу"
 
-    sch = api.get_schedule(group)
+    # спрашиваем расписание ровно на ту дату, которая соответствует дню:
+    # бэкенд выбирает версию приказа по дате, а не по «сейчас»
+    date_str = date_for_day(day)
+
+    try:
+        sch = api.get_schedule(group, date=date_str, raise_on_error=True)
+    except APIError as e:
+        return format_schedule_error(group, day, e.detail)
 
     return format_schedule_for_day(group, sch or {}, day)
 
