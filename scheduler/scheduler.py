@@ -42,7 +42,10 @@ async def send_daily_schedule():
 
         teacher_fio = user.get("teacher_fio")
         if teacher_fio:
-            schedule = api.get_teacher_schedule(fio_full_to_initials(teacher_fio))
+            # дата версии приказа: ровно тот день, за который рассылаем
+            schedule = api.get_teacher_schedule(
+                fio_full_to_initials(teacher_fio), date=date_for_day(day)
+            )
             if not schedule:
                 continue
             text = format_teacher_schedule_for_day(teacher_fio, schedule, day)

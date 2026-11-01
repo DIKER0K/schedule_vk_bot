@@ -181,8 +181,20 @@ class APIClient:
             raise_on_error=raise_on_error,
         )
 
-    def get_teacher_schedule(self, fio_key: str):
-        return self.request("GET", f"/schedule/teacher/{fio_key}")
+    def get_teacher_schedule(
+        self, fio_key: str, date: Optional[str] = None, raise_on_error: bool = False
+    ):
+        """Расписание преподавателя на дату (YYYY-MM-DD); без даты — на сегодня.
+
+        Дата обязательна по смыслу: бэкенд выбирает версию приказа по дате, и
+        без параметра отдаёт «сегодня», даже если человек нажал «📅 ПТ».
+        """
+        return self.request(
+            "GET",
+            f"/schedule/teacher/{fio_key}",
+            params={"date": date} if date else None,
+            raise_on_error=raise_on_error,
+        )
 
     def upload_schedule(self, docx_bytes: bytes, json_bytes: bytes | None = None):
         files = {

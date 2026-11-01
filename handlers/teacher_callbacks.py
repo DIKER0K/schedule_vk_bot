@@ -2,7 +2,12 @@ from vkbottle.bot import MessageEvent, Message
 from core.bot import bot
 
 from utils.api import api
-from utils.schedule_utils import get_current_day, format_teacher_schedule_for_week
+from utils.schedule_utils import (
+    date_for_day,
+    get_current_day,
+    format_teacher_schedule_for_week,
+    today_date,
+)
 from utils.fio_utils import fio_full_to_initials
 from keyboards.teacher import teacher_panel_keyboard
 from states.teacher_states import TeacherStates
@@ -31,7 +36,7 @@ async def teacher_lessons(event: MessageEvent):
         await event.send_message("🎉 Сегодня воскресенье — занятий нет.")
         return
 
-    sch = api.get_teacher_schedule(fio_key) or {}
+    sch = api.get_teacher_schedule(fio_key, date=date_for_day(today)) or {}
 
     schedule = sch.get("schedule", {})
 
@@ -81,7 +86,8 @@ async def teacher_other_schedule_show(message: Message, user):
     fio = message.text.strip()
     fio_key = fio[0].upper() + fio[1:] if fio else fio
 
-    sch = api.get_teacher_schedule(fio_key)
+    # неделя целиком: дата нужна, чтобы взять версию приказа на эту неделю
+    sch = api.get_teacher_schedule(fio_key, date=today_date())
     if not sch:
         await message.answer(f"❌ Расписание для '{fio_key}' не найдено.")
         return

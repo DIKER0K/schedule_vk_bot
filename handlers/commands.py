@@ -16,8 +16,10 @@ from utils.schedule_utils import (
     get_current_day,
     get_tomorrow_day,
     format_schedule_error,
+    format_teacher_schedule_error,
     format_schedule_for_day,
     format_teacher_schedule_for_day,
+    in_day_ru,
 )
 from utils.subscription import is_subscribed, get_subscribe_message
 
@@ -80,7 +82,20 @@ def get_teacher_schedule(user, day):
     if not teacher_fio:
         return "❌ У вас не указано ФИО преподавателя"
 
-    sch = api.get_teacher_schedule(fio_full_to_initials(teacher_fio))
+    # спрашиваем расписание ровно на ту дату, которая соответствует дню:
+    # бэкенд выбирает версию приказа по дате, а не по «сейчас»
+    date_str = date_for_day(day)
+
+    try:
+        sch = api.get_teacher_schedule(
+            fio_full_to_initials(teacher_fio),
+            date=date_str,
+            raise_on_error=True,
+        )
+    except APIError as e:
+        if e.status_code == 204:
+            return f"📅 {in_day_ru(day).capitalize()} пар нет"
+        return format_teacher_schedule_error(teacher_fio, day, e.detail)
 
     return format_teacher_schedule_for_day(
         teacher_fio,
