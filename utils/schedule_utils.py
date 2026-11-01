@@ -71,6 +71,11 @@ def date_for_day(day: str, now: Optional[datetime] = None) -> str:
     return (now.date() + timedelta(days=delta)).isoformat()
 
 
+def today_date() -> str:
+    """Сегодняшняя дата в формате YYYY-MM-DD (по часовому поясу школы)."""
+    return datetime.now(ZoneInfo(TZ)).date().isoformat()
+
+
 def _as_int(value) -> Optional[int]:
     try:
         return int(value)
@@ -84,6 +89,18 @@ def _classroom_note_text(note) -> str:
     if not text:
         return ""
     return CLASSROOM_NOTES.get(text.upper(), text.lower())
+
+
+def _lesson_place(info: Dict[str, Any]) -> str:
+    """Место пары для строки преподавателя: «117 каб.» или «практика».
+
+    Бэкенд отдаёт либо номер кабинета, либо пометку «ПП» / «ДО» (у группы нет
+    кабинета на этот период). Раньше бот печатал «ПП каб.».
+    """
+    room = str(info.get("classroom") or "").strip()
+    if room:
+        return f"{room} каб."
+    return _classroom_note_text(info.get("classroom_note"))
 
 
 def schedule_header_lines(schedule_doc: Dict[str, Any]) -> List[str]:
@@ -149,6 +166,26 @@ def format_schedule_error(group_name: str, day: str, detail: str = "") -> str:
         return "❌ Расписание для вашей группы не найдено"
 
     return "😔 Не удалось получить расписание.\nПопробуйте чуть позже."
+
+
+def format_teacher_schedule_error(teacher_fio: str, day: str, detail: str = "") -> str:
+    """То же для расписания преподавателя: 404 «не опубликовано», выходной и т.п."""
+    text = (detail or "").strip()
+    low = text.lower()
+
+    if "не опубликован" in low:
+        return (
+            f"📅 Расписание для {teacher_fio} на {day} ещё не опубликовано.\n"
+            "Обычно его выкладывают в конце недели."
+        )
+
+    if any(word in low for word in ("выходн", "праздн", "не учебн", "каникул")):
+        return text or f"📅 {day} — выходной"
+
+    if "не найден" in low:
+        return f"❌ Преподаватель {teacher_fio} не найден в расписании"
+
+    return f"😔 Не удалось получить расписание для {teacher_fio}.\nПопробуйте чуть позже."
 
 
 def format_schedule_for_day(
@@ -249,7 +286,6 @@ def format_teacher_schedule_for_day(
         for num, info in sorted(day_dict.items(), key=lambda x: lesson_sort_key(x[0])):
             subject = info.get("subject", "")
             group = info.get("group", "")
-            room = info.get("classroom", "")
             time_str = info.get("time")
 
             base, half, subgroup = format_lesson_number(num)
@@ -268,8 +304,9 @@ def format_teacher_schedule_for_day(
             if group:
                 line += f" — {group}"
 
-            if room:
-                line += f" ({room} каб.)"
+            place = _lesson_place(info)
+            if place:
+                line += f" ({place})"
 
             if time_str:
                 line += f"\n 🕒 {time_str}"
@@ -278,12 +315,12 @@ def format_teacher_schedule_for_day(
             for p in info.get("parallels") or []:
                 p_subj = (p.get("subject") or "").strip()
                 p_group = (p.get("group") or "").strip()
-                p_room = (p.get("classroom") or "").strip()
                 alt = f"   ⚡ ещё: {p_group}"
                 if p_subj and p_subj.lower() != (subject or "").strip().lower():
                     alt += f" — {p_subj}"
-                if p_room:
-                    alt += f" ({p_room} каб.)"
+                p_place = _lesson_place(p)
+                if p_place:
+                    alt += f" ({p_place})"
                 line += "\n" + alt
 
             if shift_name == "first_shift":
@@ -318,7 +355,6 @@ def _format_shift_lessons(schedule: Dict, day: str, shift_name: str) -> list:
     for num, info in sorted(day_dict.items(), key=lambda x: lesson_sort_key(x[0])):
         subject = info.get("subject", "")
         group = info.get("group", "")
-        room = info.get("classroom", "")
         time_str = info.get("time")
         base, half, subgroup = format_lesson_number(num)
         if half == "2":
@@ -330,8 +366,9 @@ def _format_shift_lessons(schedule: Dict, day: str, shift_name: str) -> list:
             line += subject
         if group:
             line += f" — {group}"
-        if room:
-            line += f" ({room} каб.)"
+        place = _lesson_place(info)
+        if place:
+            line += f" ({place})"
         if time_str:
             line += f"\n 🕒 {time_str}"
 
@@ -343,13 +380,13 @@ def _format_shift_lessons(schedule: Dict, day: str, shift_name: str) -> list:
             for p in parallels:
                 p_subj = (p.get("subject") or "").strip()
                 p_group = (p.get("group") or "").strip()
-                p_room = (p.get("classroom") or "").strip()
                 alt = f"      • {p_group}"
                 # предмет может совпадать (лекция на поток) — тогда не дублируем
                 if p_subj and p_subj.lower() != (subject or "").strip().lower():
                     alt += f" — {p_subj}"
-                if p_room:
-                    alt += f" ({p_room} каб.)"
+                p_place = _lesson_place(p)
+                if p_place:
+                    alt += f" ({p_place})"
                 line += "\n" + alt
 
         lessons.append(line)
