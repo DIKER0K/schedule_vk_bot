@@ -126,6 +126,22 @@ def schedule_header_lines(schedule_doc: Dict[str, Any]) -> List[str]:
     return lines
 
 
+_UNKNOWN_ERROR_TEXT = "😔 Не удалось получить расписание.\nПопробуйте чуть позже."
+
+
+def _is_holiday_detail(low: str) -> bool:
+    """Текст бэкенда про нерабочий день (выходной, праздник, каникулы)."""
+    return any(word in low for word in ("выходн", "праздн", "не учебн", "каникул"))
+
+
+def _unpublished_text(day: str, subject: str) -> str:
+    """Расписание на дату ещё не выложили — это нормальная ситуация, не сбой."""
+    return (
+        f"📅 Расписание на {day} ({subject}) ещё не опубликовано.\n"
+        "Обычно его выкладывают в конце недели."
+    )
+
+
 def format_schedule_error(group_name: str, day: str, detail: str = "") -> str:
     """Что показать вместо расписания, когда бэкенд ответил ошибкой.
 
@@ -137,18 +153,33 @@ def format_schedule_error(group_name: str, day: str, detail: str = "") -> str:
     low = text.lower()
 
     if "не опубликован" in low:
-        return (
-            f"📅 Расписание на {day} ({group_name}) ещё не опубликовано.\n"
-            "Обычно его выкладывают в конце недели."
-        )
+        return _unpublished_text(day, group_name)
 
-    if any(word in low for word in ("выходн", "праздн", "не учебн", "каникул")):
+    if _is_holiday_detail(low):
         return text or f"📅 {day} — выходной"
 
     if "не найдена" in low or "не найден" in low:
         return "❌ Расписание для вашей группы не найдено"
 
-    return "😔 Не удалось получить расписание.\nПопробуйте чуть позже."
+    return _UNKNOWN_ERROR_TEXT
+
+
+def format_teacher_schedule_error(teacher_fio: str, day: str, detail: str = "") -> str:
+    """То же для преподавателя: старая версия расписания вместо «не опубликовано»
+    показываться не должна, поэтому ошибку бэкенда переводим в человеческий текст."""
+    text = (detail or "").strip()
+    low = text.lower()
+
+    if "не опубликован" in low:
+        return _unpublished_text(day, teacher_fio)
+
+    if _is_holiday_detail(low):
+        return text or f"📅 {day} — выходной"
+
+    if "не найден" in low:
+        return f"❌ Расписание для {teacher_fio} не найдено"
+
+    return _UNKNOWN_ERROR_TEXT
 
 
 def format_schedule_for_day(
