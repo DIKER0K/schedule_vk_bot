@@ -13,6 +13,12 @@ DAY_PREP_CASE = {
     "Воскресенье": "в воскресенье",
 }
 
+# Пометки вместо номера кабинета в приказе о распределении
+CLASSROOM_NOTES = {
+    "ПП": "практика",
+    "ДО": "дистанционно",
+}
+
 
 def lesson_sort_key(num: str):
     return [int(x) for x in num.split(".")]
@@ -51,6 +57,100 @@ def get_tomorrow_day() -> Optional[str]:
     return DAYS_RU[wd]
 
 
+def date_for_day(day: str, now: Optional[datetime] = None) -> str:
+    """Дата ближайшего дня `day` в формате YYYY-MM-DD (сегодня, если совпал).
+
+    Бот обязан спрашивать расписание на конкретную дату: бэкенд выбирает версию
+    расписания по дате, и без параметра отдаёт «сегодня», даже если человек
+    нажал «📅 ПТ».
+    """
+    now = now or datetime.now(ZoneInfo(TZ))
+    if day not in DAYS_RU:
+        return ""
+    delta = (DAYS_RU.index(day) - now.weekday()) % 7
+    return (now.date() + timedelta(days=delta)).isoformat()
+
+
+def _as_int(value) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _classroom_note_text(note) -> str:
+    """«ПП» → «практика», «ДО» → «дистанционно», неизвестное — как есть."""
+    text = str(note or "").strip()
+    if not text:
+        return ""
+    return CLASSROOM_NOTES.get(text.upper(), text.lower())
+
+
+def schedule_header_lines(schedule_doc: Dict[str, Any]) -> List[str]:
+    """Строки шапки: корпус и кабинет на период, затем смена (если не первая).
+
+    Бэкенд отдаёт эти поля у версии расписания; у старого бэкенда их нет,
+    тогда шапка пустая и вид расписания не меняется.
+    """
+    doc = schedule_doc or {}
+
+    def value(key):
+        """Поле версии: сначала сверху, затем внутри блока schedule."""
+        if doc.get(key) not in (None, ""):
+            return doc.get(key)
+        return (doc.get("schedule") or {}).get(key)
+
+    shift = _as_int(value("shift"))
+    if shift is None:
+        shift = _as_int((doc.get("shift_info") or {}).get("shift"))
+
+    building = _as_int(value("building"))
+    classroom = str(value("classroom") or "").strip()
+    note = _classroom_note_text(value("classroom_note"))
+
+    place = ""
+    if building:
+        place = f"{building} корпус"
+    if classroom:
+        room = f"каб. {classroom}"
+        place = f"{place}, {room}" if place else room
+    elif note:
+        place = f"{place}, {note}" if place else note
+
+    lines: List[str] = []
+    if place:
+        lines.append(f"📍 {place}")
+    if shift and shift > 1:
+        # первая смена — обычное состояние, про неё не пишем
+        lines.append(f"    {shift} смена")
+    return lines
+
+
+def format_schedule_error(group_name: str, day: str, detail: str = "") -> str:
+    """Что показать вместо расписания, когда бэкенд ответил ошибкой.
+
+    «Ещё не опубликовано» — не сбой, а нормальная ситуация конца недели,
+    поэтому отвечаем спокойным текстом без слова «ошибка». Про выходной
+    показываем текст бэкенда как есть.
+    """
+    text = (detail or "").strip()
+    low = text.lower()
+
+    if "не опубликован" in low:
+        return (
+            f"📅 Расписание на {day} ({group_name}) ещё не опубликовано.\n"
+            "Обычно его выкладывают в конце недели."
+        )
+
+    if any(word in low for word in ("выходн", "праздн", "не учебн", "каникул")):
+        return text or f"📅 {day} — выходной"
+
+    if "не найдена" in low or "не найден" in low:
+        return "❌ Расписание для вашей группы не найдено"
+
+    return "😔 Не удалось получить расписание.\nПопробуйте чуть позже."
+
+
 def format_schedule_for_day(
     group_name: str, schedule_doc: Dict[str, Any], day: str
 ) -> str:
@@ -61,7 +161,11 @@ def format_schedule_for_day(
     day_lessons = (schedule.get("days") or {}).get(day, {})
     if not zero_lesson and not day_lessons:
         return f"📅 {in_day_ru(day).capitalize()} пар нет"
-    result = f"📚 Расписание на {day} ({group_name}):\n\n"
+    result = f"📚 Расписание на {day} ({group_name}):"
+    header_lines = schedule_header_lines(schedule_doc)
+    if header_lines:
+        result += "\n" + "\n".join(header_lines)
+    result += "\n\n"
     note = (schedule_doc.get("note") or "").strip()
     if note:
         # Приказ администрации дня: например, «все студенты учатся во 2 корпусе»
