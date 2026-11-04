@@ -165,17 +165,20 @@ async def admin_teachers_list(event: MessageEvent):
 @bot.on.raw_event("message_event", dataclass=MessageEvent, payload={"cmd": "admin_broadcast"})
 async def admin_broadcast_init(event: MessageEvent):
     await bot.state_dispenser.set(event.peer_id, AdminStates.WAIT_BROADCAST_MSG)
+
+    # Отмена — только кнопкой: текст «отмена» легко перепутать с началом
+    # сообщения, а кнопка всегда под рукой и на обоих шагах.
+    kb = Keyboard(inline=True)
+    kb.add(Callback("🚫 Отмена", {"cmd": "broadcast_cancel"}))
+
     await event.send_message(
-        "📣 Отправьте сообщение (текст или фото), которое нужно разослать всем пользователям.\n"
-        "Для отмены напишите 'отмена'."
+        "📣 Отправьте сообщение (текст или фото), которое нужно разослать всем пользователям.",
+        keyboard=kb.get_json(),
     )
+
 
 @bot.on.message(state=AdminStates.WAIT_BROADCAST_MSG)
 async def process_broadcast(message: Message):
-    if message.text and message.text.lower() in ("отмена", "назад"):
-        await bot.state_dispenser.delete(message.peer_id)
-        return await message.answer("❌ Рассылка отменена.", keyboard=admin_keyboard().get_json())
-
     if not message.text and not message.attachments:
         return await message.answer("❌ Отправьте текст или фото для рассылки.")
 
@@ -204,6 +207,8 @@ async def process_broadcast(message: Message):
     "message_event", dataclass=MessageEvent, payload={"cmd": "broadcast_cancel"}
 )
 async def broadcast_cancel(event: MessageEvent):
+    # Отмена работает на обоих шагах: и пока ждём текст, и на предпросмотре.
+    await bot.state_dispenser.delete(event.peer_id)
     BROADCAST_DRAFTS.pop(event.peer_id, None)
     await event.edit_message(
         "❌ Рассылка отменена.", keyboard=admin_keyboard().get_json()
