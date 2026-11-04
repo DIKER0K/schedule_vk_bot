@@ -13,6 +13,10 @@ from keyboards.admin import admin_keyboard
 from states.admin_states import AdminStates
 from utils.teacher_requests import teacher_requests
 
+# Черновики рассылки: текст и вложения ждут подтверждения администратора
+# (peer_id → {"text": str | None, "attachments": list})
+BROADCAST_DRAFTS: dict[int, dict] = {}
+
 
 @bot.on.raw_event(
     "message_event",
@@ -175,25 +179,69 @@ async def process_broadcast(message: Message):
     if not message.text and not message.attachments:
         return await message.answer("❌ Отправьте текст или фото для рассылки.")
 
-    await message.answer("⏳ Начинаю рассылку...")
-    users = api.get_users_by_platform()
+    await bot.state_dispenser.delete(message.peer_id)
+
+    # Не рассылаем сразу: держим черновик до подтверждения, чтобы админ видел
+    # текст и число получателей (раньше сообщение уходило всем безвозвратно).
+    BROADCAST_DRAFTS[message.peer_id] = {
+        "text": message.text,
+        "attachments": message.attachments,
+    }
+    users = api.get_users_by_platform(limit=1000)
+
+    kb = Keyboard(inline=True)
+    kb.add(Callback("✅ Разослать", {"cmd": "broadcast_send"}))
+    kb.add(Callback("🚫 Отмена", {"cmd": "broadcast_cancel"}))
+
+    preview = message.text or "(вложение без текста)"
+    await message.answer(
+        f"Разослать {len(users)} пользователям?\n\nТекст:\n{preview[:900]}",
+        keyboard=kb.get_json(),
+    )
+
+
+@bot.on.raw_event(
+    "message_event", dataclass=MessageEvent, payload={"cmd": "broadcast_cancel"}
+)
+async def broadcast_cancel(event: MessageEvent):
+    BROADCAST_DRAFTS.pop(event.peer_id, None)
+    await event.edit_message(
+        "❌ Рассылка отменена.", keyboard=admin_keyboard().get_json()
+    )
+
+
+@bot.on.raw_event(
+    "message_event", dataclass=MessageEvent, payload={"cmd": "broadcast_send"}
+)
+async def broadcast_send(event: MessageEvent):
+    draft = BROADCAST_DRAFTS.pop(event.peer_id, None)
+    if not draft:
+        return await event.edit_message(
+            "❌ Черновик не найден, начните заново.",
+            keyboard=admin_keyboard().get_json(),
+        )
+
+    await event.show_snackbar("Рассылаю...")
+    users = api.get_users_by_platform(limit=1000)
 
     count = 0
     for u in users:
         try:
             params = dict(user_id=u["user_id"], random_id=0)
-            if message.text:
-                params["message"] = message.text
-            if message.attachments:
-                params["attachment"] = message.attachments
+            if draft["text"]:
+                params["message"] = draft["text"]
+            if draft["attachments"]:
+                params["attachment"] = draft["attachments"]
             await bot.api.messages.send(**params)
             count += 1
             await asyncio.sleep(0.05)
-        except:
+        except Exception:
             continue
 
-    await bot.state_dispenser.delete(message.peer_id)
-    await message.answer(f"✅ Рассылка завершена. Получили: {count} чел.", keyboard=admin_keyboard().get_json())
+    await event.send_message(
+        f"✅ Рассылка завершена. Получили: {count} чел.",
+        keyboard=admin_keyboard().get_json(),
+    )
 
 @bot.on.raw_event("message_event", dataclass=MessageEvent, payload={"cmd": "admin_refresh_bell"})
 async def admin_bell_init(event: MessageEvent):
@@ -287,40 +335,6 @@ async def notify_all(event: MessageEvent):
         f"✅ Уведомлено пользователей: {count}",
         keyboard=admin_keyboard().get_json()
     )
-
-@bot.on.raw_event(
-    "message_event",
-    dataclass=MessageEvent,
-    payload_map={"cmd": "notify_confirm"},
-)
-async def notify_confirm(event: MessageEvent):
-    """Кнопка «Расписание обновлено»: показать текст и спросить подтверждение.
-
-    Отдельная кнопка нужна, когда расписание залили не через бота (например,
-    напрямую в API): кнопка «уведомить» после загрузки в этом случае не
-    появляется. Рассылку делает существующий notify_all — здесь только
-    предпросмотр текста и число получателей.
-    """
-    payload = event.get_payload_json()
-    context = payload.get("type", "schedule")
-
-    if context == "bell":
-        msg_text = "🔔 Обновлено расписание звонков!"
-    else:
-        msg_text = "📚 Обновлено основное расписание занятий!"
-
-    users = api.get_users_by_platform(limit=1000)
-
-    kb = Keyboard(inline=True)
-    kb.add(Callback("✅ Разослать", {"cmd": "notify_all", "type": context}))
-    kb.add(Callback("🚫 Отмена", {"cmd": "skip_notify", "type": context}))
-
-    await event.send_message(
-        f"Разослать {len(users)} пользователям?\n\n"
-        f"Текст:\n{msg_text}",
-        keyboard=kb.get_json(),
-    )
-
 
 @bot.on.raw_event(
     "message_event",

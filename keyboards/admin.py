@@ -8,13 +8,7 @@ def admin_keyboard():
     kb.add(Callback("👥 Пользователи", payload={"cmd": "admin_users"}))
     kb.add(Callback("📊 Статистика", payload={"cmd": "admin_stats"})).row()
 
-    kb.add(Callback("📢 Рассылка", payload={"cmd": "admin_broadcast"}))
-    kb.add(
-        Callback(
-            "📣 Расписание обновлено",
-            payload={"cmd": "notify_confirm", "type": "schedule"},
-        )
-    ).row()
+    kb.add(Callback("📢 Рассылка", payload={"cmd": "admin_broadcast"})).row()
 
     kb.add(Callback("🔄 Обновить расписание", payload={"cmd": "admin_refresh"}))
     kb.add(Callback("🔔 Звонки", payload={"cmd": "admin_refresh_bell"})).row()
