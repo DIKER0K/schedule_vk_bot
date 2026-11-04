@@ -58,7 +58,12 @@ def get_tomorrow_day() -> Optional[str]:
 
 
 def date_for_day(day: str, now: Optional[datetime] = None) -> str:
-    """Дата ближайшего дня `day` в формате YYYY-MM-DD (сегодня, если совпал).
+    """Дата дня `day` на ТЕКУЩЕЙ неделе (понедельник — первый день).
+
+    Бот листает расписание одной недели: в среду «ПН» — это понедельник этой
+    же недели, а не следующий. Раньше считался «ближайший будущий день», и в
+    середине недели кнопка понедельника уезжала на следующую неделю — там
+    расписания ещё нет, и студент получал «не опубликовано» вместо этой недели.
 
     Бот обязан спрашивать расписание на конкретную дату: бэкенд выбирает версию
     расписания по дате, и без параметра отдаёт «сегодня», даже если человек
@@ -67,8 +72,8 @@ def date_for_day(day: str, now: Optional[datetime] = None) -> str:
     now = now or datetime.now(ZoneInfo(TZ))
     if day not in DAYS_RU:
         return ""
-    delta = (DAYS_RU.index(day) - now.weekday()) % 7
-    return (now.date() + timedelta(days=delta)).isoformat()
+    monday = now.date() - timedelta(days=now.weekday())
+    return (monday + timedelta(days=DAYS_RU.index(day))).isoformat()
 
 
 def _as_int(value) -> Optional[int]:
