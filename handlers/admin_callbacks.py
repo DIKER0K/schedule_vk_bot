@@ -291,6 +291,40 @@ async def notify_all(event: MessageEvent):
 @bot.on.raw_event(
     "message_event",
     dataclass=MessageEvent,
+    payload_map={"cmd": "notify_confirm"},
+)
+async def notify_confirm(event: MessageEvent):
+    """Кнопка «Расписание обновлено»: показать текст и спросить подтверждение.
+
+    Отдельная кнопка нужна, когда расписание залили не через бота (например,
+    напрямую в API): кнопка «уведомить» после загрузки в этом случае не
+    появляется. Рассылку делает существующий notify_all — здесь только
+    предпросмотр текста и число получателей.
+    """
+    payload = event.get_payload_json()
+    context = payload.get("type", "schedule")
+
+    if context == "bell":
+        msg_text = "🔔 Обновлено расписание звонков!"
+    else:
+        msg_text = "📚 Обновлено основное расписание занятий!"
+
+    users = api.get_users_by_platform(limit=1000)
+
+    kb = Keyboard(inline=True)
+    kb.add(Callback("✅ Разослать", {"cmd": "notify_all", "type": context}))
+    kb.add(Callback("🚫 Отмена", {"cmd": "skip_notify", "type": context}))
+
+    await event.send_message(
+        f"Разослать {len(users)} пользователям?\n\n"
+        f"Текст:\n{msg_text}",
+        keyboard=kb.get_json(),
+    )
+
+
+@bot.on.raw_event(
+    "message_event",
+    dataclass=MessageEvent,
     payload={"cmd": "admin_refresh"},
 )
 async def admin_refresh(event: MessageEvent):
